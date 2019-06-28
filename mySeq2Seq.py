@@ -1,4 +1,5 @@
 from __future__ import unicode_literals, print_function, division
+import os
 from io import open
 import unicodedata
 import string
@@ -326,11 +327,14 @@ def evaluateRandomly(encoder, decoder, n=10):
         print('')
         print("bleu score: " + str(my_score))
 
-hidden_size = 256
-encoder1 = EncoderRNN(input_lang.n_words, hidden_size).to(device)
-decoder1 = DecoderRNN(hidden_size, output_lang.n_words, dropout_p=0.1).to(device)
+if __name__ == '__main__':
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    hidden_size = 256
+    encoder1 = EncoderRNN(input_lang.n_words, hidden_size).to(device)
+    decoder1 = DecoderRNN(hidden_size, output_lang.n_words).to(device)
 
-trainIters(encoder1, decoder1, 75000, print_every=5000)
-torch.save(encoder1.state_dict(), "../myencodernoattn")
-torch.save(decoder1.state_dict(), "../mydecodernoattn")
-evaluateRandomly(encoder1, decoder1)
+    trainIters(encoder1, decoder1, 75000, print_every=5000)
+    torch.save(encoder1.state_dict(), "../myencodernoattn")
+    torch.save(decoder1.state_dict(), "../mydecodernoattn")
+    evaluateRandomly(encoder1, decoder1)
