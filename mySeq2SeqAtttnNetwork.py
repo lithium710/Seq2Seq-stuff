@@ -157,7 +157,7 @@ def showPlot(points):
     plt.savefig("../myfig")
 
 
-def trainIters(encoder, decoder, epoch, print_every=1000, plot_every=100, learning_rate=0.01, batch_size=16):
+def trainIters(encoder, decoder, epoch, print_every=100, plot_every=10, learning_rate=0.01, batch_size=16):
     start = time.time()
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
@@ -198,8 +198,8 @@ if __name__ == '__main__':
     print(random.choice(pairs))
     encoder1 = EncoderRNN(input_lang.n_words, hidden_size).to(device)
     attn_decoder1 = AttnDecoderRNN(hidden_size, output_lang.n_words, dropout_p=0.1).to(device)
-    for i in range(epoch_count):
-        trainIters(encoder1, attn_decoder1, i)
+    for j in range(epoch_count):
+        trainIters(encoder1, attn_decoder1, j)
     torch.save(encoder1.state_dict(), "../myencoder1")
     torch.save(attn_decoder1.state_dict(), "../mydecoder1")
     eval.evaluateRandomly(input_lang, output_lang, encoder1, attn_decoder1, pairs)
