@@ -199,7 +199,7 @@ if __name__ == '__main__':
     encoder1 = EncoderRNN(input_lang.n_words, hidden_size).to(device)
     attn_decoder1 = AttnDecoderRNN(hidden_size, output_lang.n_words, dropout_p=0.1).to(device)
     for j in range(epoch_count):
-        trainIters(encoder1, attn_decoder1, j)
+        trainIters(encoder1, attn_decoder1, j, print_every=100, plot_every=10)
     torch.save(encoder1.state_dict(), "../myencoder1")
     torch.save(attn_decoder1.state_dict(), "../mydecoder1")
     eval.evaluateRandomly(input_lang, output_lang, encoder1, attn_decoder1, pairs)
