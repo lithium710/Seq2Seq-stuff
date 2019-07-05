@@ -1,14 +1,19 @@
 from __future__ import unicode_literals, print_function, division
 import os
 from io import open
-import unicodedata
-import string
 import re
 import random
 import torch
 import torch.nn as nn
 from torch import optim
 import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
+import time
+import math
+import matplotlib.pyplot as plt
+plt.switch_backend('agg')
+import matplotlib.ticker as ticker
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -101,8 +106,29 @@ def prepareData(lang1, lang2, reverse=False):
     return input_lang, output_lang, pairs
 
 
+def indexesFromSentence(lang, sentence):
+    return [lang.word2index[word] for word in sentence.split(' ')]
+
+
+def tensorFromSentence(lang, sentence):
+    indexes = indexesFromSentence(lang, sentence)
+    indexes.append(EOS_token)
+    return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
+
 input_lang, output_lang, pairs = prepareData('eng', 'chinese', True)
 print(random.choice(pairs))
+
+
+class SentenceDataset(Dataset):
+    def __init__(self, pairs):
+        self.mypairs = pairs
+
+    def __len__(self):
+        return len(pairs)
+
+    def __getitem__(self, idx):
+        return pairs[idx]
+
 
 class EncoderRNN(nn.Module):
     def __init__(self, input_size, hidden_size):
@@ -120,6 +146,7 @@ class EncoderRNN(nn.Module):
 
     def initHidden(self):
         return torch.zeros(1, 1, self.hidden_size, device=device)
+
 
 class AttnDecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size, dropout_p=0.1, max_length=MAX_LENGTH):
@@ -157,20 +184,6 @@ class AttnDecoderRNN(nn.Module):
     def initHidden(self):
         return torch.zeros(1, 1, self.hidden_size, device=device)
 
-def indexesFromSentence(lang, sentence):
-    return [lang.word2index[word] for word in sentence.split(' ')]
-
-
-def tensorFromSentence(lang, sentence):
-    indexes = indexesFromSentence(lang, sentence)
-    indexes.append(EOS_token)
-    return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
-
-
-def tensorsFromPair(pair):
-    input_tensor = tensorFromSentence(input_lang, pair[0])
-    target_tensor = tensorFromSentence(output_lang, pair[1])
-    return (input_tensor, target_tensor)
 
 teacher_forcing_ratio = 0.5
 
@@ -226,8 +239,6 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
 
     return loss.item() / target_length
 
-import time
-import math
 
 
 def asMinutes(s):
@@ -243,11 +254,6 @@ def timeSince(since, percent):
     rs = es - s
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
-import matplotlib.pyplot as plt
-plt.switch_backend('agg')
-import matplotlib.ticker as ticker
-import numpy as np
-
 
 def showPlot(points):
     plt.figure()
@@ -258,7 +264,8 @@ def showPlot(points):
     plt.plot(points)
     plt.savefig("../myfig")
 
-def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.01):
+
+def trainIters(encoder, decoder, epoch, print_every=1000, plot_every=100, learning_rate=0.01, batch_size=16):
     start = time.time()
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
@@ -266,27 +273,23 @@ def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, lear
 
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
-    training_pairs = [tensorsFromPair(random.choice(pairs))
-                      for i in range(n_iters)]
+    myDataset = SentenceDataset(pairs)
+    train_loader = DataLoader(myDataset, batch_size)
     criterion = nn.NLLLoss()
 
-    for iter in range(1, n_iters + 1):
-        training_pair = training_pairs[iter - 1]
-        input_tensor = training_pair[0]
-        target_tensor = training_pair[1]
+    for batch_idx, (data, target) in enumerate(train_loader):
+        for i in range(batch_size):
+            loss = train(tensorFromSentence(input_lang, data[i]), tensorFromSentence(output_lang, target[i]), encoder,
+                         decoder, encoder_optimizer, decoder_optimizer, criterion)
+            print_loss_total += loss
+            plot_loss_total += loss
 
-        loss = train(input_tensor, target_tensor, encoder,
-                     decoder, encoder_optimizer, decoder_optimizer, criterion)
-        print_loss_total += loss
-        plot_loss_total += loss
-
-        if iter % print_every == 0:
+        if batch_idx % print_every == 0:
             print_loss_avg = print_loss_total / print_every
             print_loss_total = 0
-            print('%s (%d %d%%) %.4f' % (timeSince(start, iter / n_iters),
-                                         iter, iter / n_iters * 100, print_loss_avg))
+            print(batch_idx, print_loss_avg)
 
-        if iter % plot_every == 0:
+        if batch_idx % plot_every == 0:
             plot_loss_avg = plot_loss_total / plot_every
             plot_losses.append(plot_loss_avg)
             plot_loss_total = 0
@@ -347,10 +350,11 @@ if __name__ == '__main__':
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     hidden_size = 256
+    epoch_count = 5
     encoder1 = EncoderRNN(input_lang.n_words, hidden_size).to(device)
     attn_decoder1 = AttnDecoderRNN(hidden_size, output_lang.n_words, dropout_p=0.1).to(device)
-
-    trainIters(encoder1, attn_decoder1, 75000, print_every=5000)
+    for i in range(epoch_count):
+        trainIters(encoder1, attn_decoder1, i)
     torch.save(encoder1.state_dict(), "../myencoder1")
     torch.save(attn_decoder1.state_dict(), "../mydecoder1")
     evaluateRandomly(encoder1, attn_decoder1)
