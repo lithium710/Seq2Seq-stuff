@@ -107,6 +107,8 @@ def tensorFromSentence(lang, sentence):
     indexes.append(EOS_token)
     return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
 
+def tensorFromGroup
+
 class SentenceDataset(Dataset):
     def __init__(self, pairs):
         self.mypairs = pairs

@@ -24,6 +24,10 @@ EOS_token = 1
 MAX_LENGTH = 300
 
 class EncoderRNN(nn.Module):
+    """
+    Encoder is a GRU that outputs some value for every word in the input sentence. For each input word, it outputs a vector and a hidden state,
+    and the hidden state is used for the next input word.
+    """
     def __init__(self, input_size, hidden_size):
         super(EncoderRNN, self).__init__()
         self.hidden_size = hidden_size
@@ -32,9 +36,9 @@ class EncoderRNN(nn.Module):
         self.gru = nn.GRU(hidden_size, hidden_size)
 
     def forward(self, input, hidden):
-        embedded = self.embedding(input).view(1, 1, -1)
+        embedded = self.embedding(input).view(-1, 1, hidden_size) #input into embedding
         output = embedded
-        output, hidden = self.gru(output, hidden)
+        output, hidden = self.gru(output, hidden) #gru takes embedded and previous hidden to make new output and hidden
         return output, hidden
 
     def initHidden(self):
@@ -57,21 +61,21 @@ class AttnDecoderRNN(nn.Module):
         self.out = nn.Linear(self.hidden_size, self.output_size)
 
     def forward(self, input, hidden, encoder_outputs):
-        embedded = self.embedding(input).view(1, 1, -1)
+        embedded = self.embedding(input).view(-1, 1, hidden_size) #input goes into embedding, then into dropout because it has already been processed in the encoder
         embedded = self.dropout(embedded)
 
         attn_weights = F.softmax(
-            self.attn(torch.cat((embedded[0], hidden[0]), 1)), dim=1)
-        attn_applied = torch.bmm(attn_weights.unsqueeze(0),
+            self.attn(torch.cat((embedded[0], hidden[0]), 1)), dim=1) #softmax onto concat'd tensor using decoder input and hidden state to make attn weights
+        attn_applied = torch.bmm(attn_weights.unsqueeze(0), # bmm (dot product) from attn weights and encoder outputs
                                  encoder_outputs.unsqueeze(0))
 
-        output = torch.cat((embedded[0], attn_applied[0]), 1)
+        output = torch.cat((embedded[0], attn_applied[0]), 1) #put embedded input and the outcome of the attention applied encoder outputs for the attn combined output
         output = self.attn_combine(output).unsqueeze(0)
 
-        output = F.relu(output)
-        output, hidden = self.gru(output, hidden)
+        output = F.relu(output) #relu on this value
+        output, hidden = self.gru(output, hidden) #gru on output and previous hidden to make new output and hidden value
 
-        output = F.log_softmax(self.out(output[0]), dim=1)
+        output = F.log_softmax(self.out(output[0]), dim=1) #log softmax on linear layer of output
         return output, hidden, attn_weights
 
     def initHidden(self):
@@ -83,7 +87,7 @@ teacher_forcing_ratio = 0.5
 def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, max_length=MAX_LENGTH):
     encoder_hidden = encoder.initHidden()
 
-    encoder_optimizer.zero_grad()
+    encoder_optimizer.zero_grad() #zero the gradients
     decoder_optimizer.zero_grad()
 
     input_length = input_tensor.size(0)
@@ -93,7 +97,7 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
 
     loss = 0
 
-    for ei in range(input_length):
+    for ei in range(input_length): # for index in input length
         encoder_output, encoder_hidden = encoder(
             input_tensor[ei], encoder_hidden)
         encoder_outputs[ei] = encoder_output[0, 0]
