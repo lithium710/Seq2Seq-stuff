@@ -7,7 +7,7 @@ import re
 import torch
 from torch.utils.data import Dataset
 
-MAX_LENGTH = 300
+MAX_LENGTH = 40
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SOS_token = 0
 EOS_token = 1
@@ -75,8 +75,6 @@ def readLangs(lang1, lang2, reverse=False):
 
     return input_lang, output_lang, pairs
 
-MAX_LENGTH = 300
-
 
 def filterPair(p):
     return len(p[0].split(' ')) < MAX_LENGTH and \
@@ -107,7 +105,12 @@ def tensorFromSentence(lang, sentence):
     indexes.append(EOS_token)
     return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
 
-def tensorFromGroup
+def tensorFromBatch(lang, batch):
+    seqOfTensor = []
+    for sentence in batch:
+        myTensor = tensorFromSentence(lang, sentence)
+        seqOfTensor.append(myTensor)
+    return seqOfTensor
 
 class SentenceDataset(Dataset):
     def __init__(self, pairs):
@@ -118,3 +121,14 @@ class SentenceDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.mypairs[idx]
+
+def createInputSeqs(lang, data, batch_size):
+    seq_len = []
+    input_seq = []
+    for input in data:
+        tensor = tensorFromSentence(lang, input)
+        seq_len.append(tensor.__len__())
+        input_seq.append(tensor)
+    input_seq = torch.nn.utils.rnn.pad_sequence(input_seq)
+    seq_len = torch.tensor(seq_len)
+    return seq_len, input_seq
